@@ -16,6 +16,7 @@ workspace "CryptoAPI-examples"
     
     group "gtest"
 
+
         project "gtest"            
             removeconfigurations "TRACE*"   
             kind "StaticLib"     
@@ -381,4 +382,18 @@ workspace "CryptoAPI-examples"
             {
                 
                 "crypt32.lib",                
+            }
+
+        create_console_charset_project("rsa-sign-file", "src", "mbcs")
+            includedirs
+            {
+                
+                "%{THIRD_PARTY}/gflags-master/bin/include",
+                            
+            }
+            links
+            {
+                "gflags",
+                "shlwapi.lib",
+                "crypt32.lib",     
             }

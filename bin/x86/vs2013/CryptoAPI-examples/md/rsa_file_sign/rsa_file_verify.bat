@@ -1,0 +1,1 @@
+rsa-sign-file.exe --enc_filename=test.txt.enc

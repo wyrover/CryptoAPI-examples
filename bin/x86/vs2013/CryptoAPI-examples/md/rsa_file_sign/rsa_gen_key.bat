@@ -1,0 +1,1 @@
+rsa-sign-file.exe --genkey
