@@ -397,3 +397,19 @@ workspace "CryptoAPI-examples"
                 "shlwapi.lib",
                 "crypt32.lib",     
             }
+
+        create_console_project("test-atl-crypt", "src")
+            includedirs
+            {
+                
+                "%{THIRD_PARTY}/gflags-master/bin/include",
+                "C:/WinDDK/7600.16385.1/inc/atl71"            
+            }
+            links
+            {
+                "gflags",
+                "shlwapi.lib",
+                "crypt32.lib",                
+            }
+
+            

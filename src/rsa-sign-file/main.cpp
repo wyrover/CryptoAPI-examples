@@ -293,48 +293,55 @@ void sign_file(std::string filename) {
     HCRYPTHASH hHash = 0;    // hash object
     DWORD dwSigLen = 0;
     BYTE* pbSignature = NULL;
-    // initialize crypto API
-    if (open_crypt()) {
-        // import our private key
-        if (open_key(RSA_PRIVATE_BIN)) {
-            // hash the input
-            if (open_hash(filename, &hHash)) {
-                // obtain size of signature
-                CryptSignHash(hHash, AT_SIGNATURE, NULL, 0, NULL, &dwSigLen);
-                pbSignature = (BYTE*)xmalloc(dwSigLen);
 
-                // sign the hash to obtain signature
-                if (CryptSignHash(hHash, AT_SIGNATURE, NULL, 0, pbSignature, &dwSigLen)) {
-                    p = (char*)sig2hex(pbSignature, dwSigLen);
+	// initialize crypto API
+	if (!open_crypt()) {
+		xstrerror("open_crypt()");
+		goto Exit0;
+	}
+    
+	// import our private key
+	if (!open_key(RSA_PRIVATE_BIN)) {
+		xstrerror("open_key()");
+		goto Exit0;
+	}
 
-                    if (p) {
-                        printf("  [ signature is: %i::%s\n", lstrlen(p), p);
+	// hash the input
+	if (open_hash(filename, &hHash)) {
+		xstrerror("open_hash()");
+		goto Exit0;
+	}   
+   
+    // obtain size of signature
+    CryptSignHash(hHash, AT_SIGNATURE, NULL, 0, NULL, &dwSigLen);
+    pbSignature = (BYTE*)xmalloc(dwSigLen);
 
-                        put_file_sign_content((filename + ".enc").c_str(), pbSignature, dwSigLen);
-                    }
+    // sign the hash to obtain signature
+    if (CryptSignHash(hHash, AT_SIGNATURE, NULL, 0, pbSignature, &dwSigLen)) {
+        p = (char*)sig2hex(pbSignature, dwSigLen);
 
-                    xfree(pbSignature);
-                } else {
-                    xstrerror("CryptSignHash()");
-                }
+        if (p) {
+            printf("  [ signature is: %i::%s\n", lstrlen(p), p);
 
-                if (hHash != 0) {
-                    CryptDestroyHash(hHash);
-                    hHash = 0;
-                }
-            } else {
-                xstrerror("open_hash()");
-            }
-
-            close_key();
-        } else {
-            xstrerror("open_key()");
+            put_file_sign_content((filename + ".enc").c_str(), pbSignature, dwSigLen);
         }
 
-        close_crypt();
+        xfree(pbSignature);
     } else {
-        xstrerror("open_crypt()");
-    }
+        xstrerror("CryptSignHash()");
+    }   
+    
+
+Exit0:
+
+	if (hHash != 0) {
+		CryptDestroyHash(hHash);
+		hHash = 0;
+	}
+
+	close_key();
+	close_crypt();
+
 }
 
 
@@ -362,44 +369,47 @@ BOOL verify_file(std::string filename) {
     HCRYPTHASH hHash = 0;    // hash object
 
     BYTE* pbSignature = NULL;
+	std::vector<BYTE> sign_message;
 
-    // initialize crypto API
-    if (open_crypt()) {
-        // import public key
-        if (open_key(RSA_PUBLIC_BIN)) {
-            // hash the input
-            if (get_enc_file_data_hash(filename.c_str(), &hHash)) {
-                // convert signature to binary
+	if (!open_crypt()) {
+		printf("open_crypt()");
+		goto Exit0;
+	}
 
-                std::vector<BYTE> sign_message;
-                if (get_enc_file_sign_message(filename.c_str(), sign_message)) {
-                    if (sign_message.size() > 0) {
-                        // verify signature
-                        bStatus = CryptVerifySignature(hHash, &sign_message[0],
-                                                       sign_message.size(), hKey, NULL, 0);
-                        printf("  [ signature is %s\n",
-                               bStatus ? "valid" : "invalid");
+	// import public key
+	if (!open_key(RSA_PUBLIC_BIN)) {
+		printf("open_key()");
+		goto Exit0;
+	}
 
-                    }
-                }
+	// hash the input
+	if (!get_enc_file_data_hash(filename.c_str(), &hHash)) {
+		printf("open_hash()");
+		goto Exit0;
+	}  
+ 
 
-                if (hHash != 0) {
-                    CryptDestroyHash(hHash);
-                    hHash = 0;
-                }
-            } else {
-                printf("open_hash()");
-            }
+    // convert signature to binary    
+    if (get_enc_file_sign_message(filename.c_str(), sign_message)) {
+        if (sign_message.size() > 0) {
+            // verify signature
+            bStatus = CryptVerifySignature(hHash, &sign_message[0],
+                                            sign_message.size(), hKey, NULL, 0);
+            printf("  [ signature is %s\n",
+                    bStatus ? "valid" : "invalid");
 
-            close_key();
-        } else {
-            printf("open_key()");
         }
+    }      
 
-        close_crypt();
-    } else {
-        printf("open_crypt()");
-    }
+Exit0:
+
+	if (hHash != 0) {
+		CryptDestroyHash(hHash);
+		hHash = 0;
+	}
+
+	close_key();
+	close_crypt();
 
     return bStatus;
 }
