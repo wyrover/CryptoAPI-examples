@@ -19,12 +19,19 @@ BOOL get_enc_file_data(const char* filename, std::vector<BYTE>& out_buffer);
 BOOL get_enc_file_sign_message(const char* filename, std::vector<BYTE>& out_buffer);
 void put_file_content(const char* filename, const BYTE* data, DWORD data_len);
 void put_file_sign_content(const char* filename, const BYTE* data, DWORD data_len);
+void gen_aes_key();
+void sha512_file(const std::string filename, std::string& data_hash);
+void gen_aes_key_iv();
+void gen_aes256_key_iv();
+void AESEncrypt(const char* inFileName, const char* outFileName);
 
 DEFINE_bool(genkey, false, "创建 rsa 密钥对");
 DEFINE_int32(keylen, 2048, "rsa 密钥位数");
 DEFINE_string(src_filename, "", "待加密文件");
 DEFINE_string(enc_filename, "", "待解密文件");
-
+DEFINE_bool(gen_aes_key, false, "创建 AES 密钥");
+DEFINE_bool(gen_aes256_key, false, "创建 AES256 密钥");
+DEFINE_string(src_sha512_filename, "", "待 sha512 文件");
 
 
 
@@ -47,9 +54,28 @@ int main(int argc, char** argv) {
         verify_file(FLAGS_enc_filename);
     }
 
+	if (FLAGS_gen_aes_key) {
+		std::cout << "创建 AES 密钥" << std::endl;
+		gen_aes_key();
+	}
+
+	if (FLAGS_gen_aes256_key) {
+		std::cout << "创建 AES256 密钥" << std::endl;
+		gen_aes256_key_iv(); 
+	}
+
+	if (!FLAGS_src_sha512_filename.empty()) {
+		std::cout << "待 sha512 文件" << std::endl;
+		std::string sha512;
+		sha512_file(FLAGS_src_sha512_filename, sha512);
+		std::cout << sha512.c_str() << std::endl;
+	}
+
 
     //cout << "src_filename =" << FLAGS_src_filename << std::endl;
 
+	
+	AESEncrypt("test1.txt", "test2.txt");
 
     gflags::ShutDownCommandLineFlags();
 
@@ -502,3 +528,611 @@ void put_file_sign_content(const char* filename, const BYTE* data, DWORD data_le
     fclose(f);
 }
 
+// print binary as c array
+void bin2c(FILE* fd, char s[], BYTE* buffer, unsigned int buffer_len) 
+{
+	int i;
+	fprintf(fd, "\nchar %s[]=\n{", s);
+
+	for (i = 0; i < buffer_len; i++) {
+		if ((i & 7) == 0 && i != 0) fprintf(fd, "\n");
+
+		if (i != 0) fprintf(fd, " ");
+
+		fprintf(fd, "0x%02x", buffer[i]);
+
+		if ((i + 1) != buffer_len) fprintf(fd, ",");
+	}
+
+	fprintf(fd, "};");
+}
+
+// From:
+// http://msdn.microsoft.com/en-us/library/windows/desktop/aa379931(v=vs.85).aspx
+typedef struct _plaintext_blob_t {
+	BLOBHEADER hdr;
+	DWORD cbKeySize;
+	BYTE rgbKeyData[1];
+} plaintext_blob_t;
+
+void gen_aes_key() {
+
+	BOOL success;
+	HCRYPTPROV provider;
+	success = CryptAcquireContext(&provider, NULL, NULL, PROV_RSA_AES, 0);
+	// Ask for a new keyset if this one doesn't exist.
+	if (!success && GetLastError() == NTE_BAD_KEYSET) {
+		success = CryptAcquireContext(&provider, NULL, NULL, PROV_RSA_AES,
+			CRYPT_NEWKEYSET);
+	}
+	//ASSERT_TRUE(success) << "CryptAcquireContext failed: " << GetLastError();
+
+	HCRYPTKEY key;
+	success = CryptGenKey(provider, CALG_AES_256, CRYPT_EXPORTABLE, &key);
+	//ASSERT_TRUE(success) << "CryptGenKey failed: " << GetLastError();
+
+	// Get the key size.
+	DWORD buffer_size = 0;
+	success = CryptExportKey(key, 0, PLAINTEXTKEYBLOB, 0, NULL, &buffer_size);
+	//ASSERT_TRUE(success) << "CryptExportKey 1 failed: " << GetLastError();
+
+	// Export the key.
+	BYTE *buffer = new BYTE[buffer_size];
+	success = CryptExportKey(key, 0, PLAINTEXTKEYBLOB, 0, buffer, &buffer_size);
+	//ASSERT_TRUE(success) << "CryptExportKey 2 failed: " << GetLastError();
+
+	plaintext_blob_t *blob = (plaintext_blob_t*)buffer;
+	//ASSERT_EQ(buffer_size - offsetof(plaintext_blob_t, rgbKeyData), blob->cbKeySize);
+
+	// Check that the rest of it is initialized.  Copy the buffer and compare it
+	// against itself to trigger the uninit checks.
+	BYTE *key_copy = new BYTE[blob->cbKeySize];
+	memcpy(key_copy, blob->rgbKeyData, blob->cbKeySize);
+	//ASSERT_EQ(0, memcmp(blob->rgbKeyData, key_copy, blob->cbKeySize));
+
+	
+
+
+	FILE* fd = NULL;
+	fd = fopen("aes_key.key", "wb");
+	if (fd != NULL) {
+		bin2c(fd, "aes_key", key_copy, blob->cbKeySize);
+		fclose(fd);
+		fd = NULL;
+	}
+
+	FILE* fd2 = NULL;
+	fd2 = fopen("aes_key.bin", "wb");
+	if (fd2 != NULL) {
+		fwrite(key_copy, 1, blob->cbKeySize, fd2);
+		printf("  [ writing %i bytes to %s\n", blob->cbKeySize, "aes_key.bin");
+		fclose(fd2);
+		fd2 = NULL;
+	}
+
+
+
+
+	delete[] key_copy;
+	delete[] buffer;
+	CryptDestroyKey(key);
+	CryptReleaseContext(provider, 0);
+
+	
+}
+
+static const DWORD kExpectedHashSize = 64;
+
+void sha512_file(const std::string filename, std::string& data_hash)
+{
+	std::string data;
+
+	std::vector<BYTE> input;
+	if (get_file_contents(filename.c_str(), input)) {
+		data = std::string((char*)&input[0]);
+	}
+
+
+	HCRYPTPROV provider = NULL;
+
+	DWORD dwVersion = GetVersion();
+	DWORD dwMajor = (DWORD)(LOBYTE(LOWORD(dwVersion)));
+
+	LPCTSTR pszProvider = MS_ENH_RSA_AES_PROV;
+	if (dwMajor <= 5)
+		pszProvider = MS_ENH_RSA_AES_PROV_XP;
+
+	if (!CryptAcquireContext(&provider,
+		NULL,
+		pszProvider,
+		PROV_RSA_AES,
+		CRYPT_VERIFYCONTEXT))
+	{
+		//LOG(ERROR) << "CryptAcquireContextW() failed: " << GetLastSystemErrorString();
+		goto Exit0;
+		
+	}
+
+	HCRYPTHASH hHash;
+
+	if (!CryptCreateHash(provider, CALG_SHA_512, NULL, 0, &hHash))
+	{
+		//LOG(ERROR) << "CryptCreateHash() failed: " << GetLastSystemErrorString();
+		goto Exit0;
+	}
+
+	if (!CryptHashData(hHash,
+		reinterpret_cast<const BYTE*>(data.c_str()),
+		static_cast<DWORD>(data.length()),
+		0))
+	{
+		//LOG(ERROR) << "CryptHashData() failed: " << GetLastSystemErrorString();
+		goto Exit0;
+	}
+
+	DWORD size = 0;
+
+	if (!CryptGetHashParam(hHash, HP_HASHVAL, NULL, &size, 0))
+	{
+		//LOG(ERROR) << "CryptGetHashParam() failed: " << GetLastSystemErrorString();
+		goto Exit0;
+	}
+
+	if (size != kExpectedHashSize)
+	{
+		//LOG(ERROR) << "Wrong hash size: " << size;
+		goto Exit0;
+	}
+
+	data_hash.resize(size);
+
+	if (!CryptGetHashParam(hHash,
+		HP_HASHVAL,
+		reinterpret_cast<BYTE*>(&data_hash[0]),
+		&size,
+		0))
+	{
+		//LOG(ERROR) << "CryptGetHashParam() failed: " << GetLastSystemErrorString();
+		goto Exit0;
+	}
+
+Exit0:
+
+	if (hHash)
+		CryptDestroyHash(hHash);
+
+	if (provider)
+		CryptReleaseContext(provider, 0);
+
+	return;
+}
+
+char * Xor(char * szData, DWORD dwKey, int nLength)
+{
+	if (szData == NULL)
+		return NULL;
+
+	for (int i = 0; i < nLength; i++)
+		szData[i] = szData[i] ^ (char)dwKey;
+
+	return szData;
+}
+
+
+// 字节反序
+void reverse(BYTE* data, int nLen)
+{
+	for (int ii = 0; ii < nLen / 2; ii++)
+	{
+		BYTE c = data[ii];
+		data[ii] = data[nLen - ii - 1];
+		data[nLen - ii - 1] = c;
+	}
+}
+
+// print binary as c array
+void print_bin2c(BYTE* buffer, unsigned int buffer_len) {
+	int i;		
+
+	for (i = 0; i < buffer_len; i++) {
+		if ((i & 7) == 0 && i != 0) printf("\n");
+
+		if (i != 0) printf(" ");
+
+		printf("0x%02x", buffer[i]);
+
+		if ((i + 1) != buffer_len) printf(",");
+	}	
+
+	
+}
+
+
+void gen_aes_key_iv()
+{
+	HCRYPTPROV provider = NULL;
+	HCRYPTKEY hKey = NULL;
+	HCRYPTKEY newHKey = NULL;
+	DWORD ivLen, blockLen = 0;
+
+	BYTE* iv = NULL;
+	BYTE* buffer = NULL;
+
+	DWORD dwVersion = GetVersion();
+	DWORD dwMajor = (DWORD)(LOBYTE(LOWORD(dwVersion)));
+
+	LPCTSTR pszProvider = MS_ENH_RSA_AES_PROV;
+	if (dwMajor <= 5)
+		pszProvider = MS_ENH_RSA_AES_PROV_XP;
+
+	if (!CryptAcquireContext(&provider,
+		NULL,
+		pszProvider,
+		PROV_RSA_AES,
+		0))
+	{
+		printf("CryptAcquireContext() failed:");
+		goto Exit0;
+	}
+
+
+	// 生成随机密钥
+	if (!CryptGenKey(provider, CALG_AES_256, CRYPT_EXPORTABLE, &hKey)) {
+		goto Exit0;
+	}
+
+	// Get the key size.
+	DWORD buffer_size = 0;
+	if (!CryptExportKey(hKey, 0, PLAINTEXTKEYBLOB, 0, NULL, &buffer_size)) {
+		printf("CryptExportKey failed.\n");
+		goto Exit0;
+	}
+	
+
+	// Export the key.
+	buffer = new BYTE[buffer_size];
+	if (!CryptExportKey(hKey, 0, PLAINTEXTKEYBLOB, 0, buffer, &buffer_size)) {
+		printf("CryptExportKey2 failed.\n");
+		goto Exit0;
+	}
+
+	plaintext_blob_t *blob = (plaintext_blob_t*)buffer;
+
+	printf("Default Key:\n");
+	print_bin2c(blob->rgbKeyData, blob->cbKeySize);
+	printf("\n\n");
+
+
+
+	//// 复制随机密钥
+	//if (!CryptDuplicateKey(hKey, NULL, 0, &newHKey)) {
+	//	goto Exit0;
+	//}
+
+	
+	// 从随机密钥获取 IV 长度
+	if (!CryptGetKeyParam(hKey, KP_IV, NULL, &ivLen, 0)) {
+		goto Exit0;
+	}
+
+	iv = new BYTE[ivLen];
+	ZeroMemory(iv, ivLen);
+
+	if (!CryptGenRandom(provider, ivLen, iv)) {
+		goto Exit0;
+	}
+	
+
+	printf("Default IV:\n");
+	print_bin2c(iv, ivLen);
+	printf("\n\n");
+
+	if (!CryptSetKeyParam(hKey, KP_IV, iv, 0)) {
+		goto Exit0;
+	}
+
+	ZeroMemory(iv, ivLen);
+	if (!CryptGetKeyParam(hKey, KP_IV, iv, &ivLen, 0)) {
+		goto Exit0;
+	}
+
+	printf("Default IV:\n");
+	print_bin2c(iv, ivLen);
+	printf("\n\n");
+
+	DWORD LenBlockAES = 0;
+	DWORD dwCount = sizeof(DWORD);
+	if (!CryptGetKeyParam(hKey, KP_BLOCKLEN, (BYTE*)&LenBlockAES, &dwCount, 0)) {
+		goto Exit0;
+	}
+	
+	printf("aes block data len: %d\n", LenBlockAES);
+
+
+	// 设置 CBC 模式
+	DWORD cipher_mode = CRYPT_MODE_CBC;
+	if (!CryptSetKeyParam(hKey, KP_MODE, reinterpret_cast<BYTE*>(&cipher_mode), 0)) {
+		goto Exit0;
+	}
+
+
+	// 设置 padding
+	DWORD padding_method = PKCS5_PADDING;
+	if (!CryptSetKeyParam(hKey, KP_PADDING, reinterpret_cast<BYTE*>(&padding_method), 0)) {
+		goto Exit0;
+	}
+
+Exit0:
+
+	if (buffer) {
+		delete[] buffer;
+		buffer = NULL;
+	}
+
+	if (iv) {
+		delete[] iv;
+		iv = NULL;
+	}
+
+	if (hKey) {
+		CryptDestroyKey(hKey);
+	}
+
+	if (newHKey) {
+		CryptDestroyKey(newHKey);
+	}
+
+	if (provider) {
+		CryptReleaseContext(provider, 0);
+	}
+
+	return;	
+}
+
+
+void gen_aes256_key_iv()
+{
+	HCRYPTPROV provider = NULL;
+	HCRYPTKEY hKey = NULL;
+	HCRYPTKEY newHKey = NULL;
+	DWORD ivLen, blockLen = 0;
+
+	BYTE* iv = NULL;
+	BYTE* buffer = NULL;
+
+	DWORD dwVersion = GetVersion();
+	DWORD dwMajor = (DWORD)(LOBYTE(LOWORD(dwVersion)));
+
+	LPCTSTR pszProvider = MS_ENH_RSA_AES_PROV;
+	if (dwMajor <= 5)
+		pszProvider = MS_ENH_RSA_AES_PROV_XP;
+
+	if (!CryptAcquireContext(&provider,
+		NULL,
+		pszProvider,
+		PROV_RSA_AES,
+		0))
+	{
+		printf("CryptAcquireContext() failed:");
+		goto Exit0;
+	}
+
+	
+	// 生成随机密钥
+	// 还可以从通过给定密码 HASH 后获取 AES 密钥
+	if (!CryptGenKey(provider, CALG_AES_256, CRYPT_EXPORTABLE, &hKey)) {
+		goto Exit0;
+	}
+
+	// Get the key size.
+	DWORD buffer_size = 0;
+	if (!CryptExportKey(hKey, 0, PLAINTEXTKEYBLOB, 0, NULL, &buffer_size)) {
+		printf("CryptExportKey failed.\n");
+		goto Exit0;
+	}
+
+
+	// Export the key.
+	buffer = new BYTE[buffer_size];
+	if (!CryptExportKey(hKey, 0, PLAINTEXTKEYBLOB, 0, buffer, &buffer_size)) {
+		printf("CryptExportKey2 failed.\n");
+		goto Exit0;
+	}
+
+	plaintext_blob_t *blob = (plaintext_blob_t*)buffer;
+
+	printf("aes Key:\n");
+	printf("\nchar aes256_key[]=\n{");
+	print_bin2c(blob->rgbKeyData, blob->cbKeySize);
+	printf("};");
+	printf("\n\n");
+
+
+	// 从随机密钥获取 IV 长度
+	if (!CryptGetKeyParam(hKey, KP_IV, NULL, &ivLen, 0)) {
+		goto Exit0;
+	}
+
+	iv = new BYTE[ivLen];
+	ZeroMemory(iv, ivLen);
+
+	if (!CryptGenRandom(provider, ivLen, iv)) {
+		goto Exit0;
+	}
+
+
+	printf("aes IV:\n");
+	printf("\nchar aes256_iv[]=\n{");
+	print_bin2c(iv, ivLen);
+	printf("};");
+	printf("\n\n");
+
+	DWORD LenBlockAES = 0;
+	DWORD dwCount = sizeof(DWORD);
+	if (!CryptGetKeyParam(hKey, KP_BLOCKLEN, (BYTE*)&LenBlockAES, &dwCount, 0)) {
+		goto Exit0;
+	}
+
+	printf("aes block data len: %d\n", LenBlockAES);
+
+Exit0:
+
+	if (buffer) {
+		delete[] buffer;
+		buffer = NULL;
+	}
+
+	if (iv) {
+		delete[] iv;
+		iv = NULL;
+	}
+
+	if (hKey) {
+		CryptDestroyKey(hKey);
+	}	
+
+	if (provider) {
+		CryptReleaseContext(provider, 0);
+	}
+
+	return;
+}
+
+
+char test_aes256_key[] =
+{ 0x18, 0xfc, 0x7c, 0xc2, 0x17, 0xc9, 0x71, 0x98,
+0x21, 0xb0, 0x80, 0xc8, 0x6d, 0x73, 0x5d, 0x7e,
+0x20, 0x02, 0xc8, 0x75, 0x0e, 0xa5, 0x55, 0x49,
+0x4c, 0xd1, 0xdc, 0x13, 0x23, 0xa6, 0xfe, 0x58 };
+
+char test_aes256_iv[] =
+{ 0x88, 0x8c, 0xe7, 0xe5, 0x37, 0xdc, 0x2b, 0xa4,
+0x4b, 0xc5, 0xd2, 0x41, 0xbc, 0x60, 0x5f, 0xa9 };
+
+DWORD GetCipherBlockSize(HCRYPTKEY key) {
+	DWORD block_size_in_bits = 0;
+	DWORD param_size = sizeof(block_size_in_bits);
+	BOOL ok = CryptGetKeyParam(key, KP_BLOCKLEN,
+		reinterpret_cast<BYTE*>(&block_size_in_bits),
+		&param_size, 0);
+	if (!ok)
+		return 0;
+
+	return block_size_in_bits / 8;
+}
+
+
+
+void AESEncrypt(const char* inFileName, const char* outFileName)
+{
+	std::vector<BYTE> orgine_data;
+
+	do 
+	{
+		if (!inFileName || !outFileName) {
+			break;
+		}
+
+		if (!get_file_contents(inFileName, orgine_data)) {
+			break;
+		}
+
+
+
+		HCRYPTPROV provider = NULL;
+		HCRYPTKEY hKey = NULL;
+
+		DWORD dwVersion = GetVersion();
+		DWORD dwMajor = (DWORD)(LOBYTE(LOWORD(dwVersion)));
+
+		LPCTSTR pszProvider = MS_ENH_RSA_AES_PROV;
+		if (dwMajor <= 5)
+			pszProvider = MS_ENH_RSA_AES_PROV_XP;
+
+		if (!CryptAcquireContext(&provider,
+			NULL,
+			pszProvider,
+			PROV_RSA_AES,
+			0))
+		{
+			printf("CryptAcquireContext() failed:");
+			break;
+		}
+
+		// 创建 Key
+		struct keyBlob
+		{
+			BLOBHEADER hdr;
+			DWORD cbKeySize;
+			BYTE rgbKeyData[32];                // FOR AES-256 = 32
+		} keyBlob;
+
+
+		keyBlob.hdr.bType = PLAINTEXTKEYBLOB;
+		keyBlob.hdr.bVersion = CUR_BLOB_VERSION;
+		keyBlob.hdr.reserved = 0;
+		keyBlob.hdr.aiKeyAlg = CALG_AES_256;    // FOR AES-256 = CALG_AES_256
+		keyBlob.cbKeySize = 32;                    // FOR AES-256 = 32
+		CopyMemory(keyBlob.rgbKeyData, test_aes256_key, keyBlob.cbKeySize);
+
+		if (!CryptImportKey(provider, (BYTE*)(&keyBlob), sizeof(keyBlob), NULL, 0, &hKey))
+		{
+			break;
+
+		}
+
+		DWORD dwMode = CRYPT_MODE_CBC, dwPadding = PKCS5_PADDING;
+
+		if (!CryptSetKeyParam(hKey, KP_IV, (BYTE*)test_aes256_iv, 0)) {
+			break;
+		}
+
+		if (!CryptSetKeyParam(hKey, KP_MODE, reinterpret_cast<BYTE*>(&dwMode), 0)) {
+			break;
+		}
+
+		if (!CryptSetKeyParam(hKey, KP_PADDING, reinterpret_cast<BYTE*>(&dwPadding), 0)) {
+			break;
+		}
+
+		DWORD block_size = GetCipherBlockSize(hKey);
+
+		DWORD data_len = orgine_data.size();
+		DWORD total_len = data_len + block_size;
+
+		std::vector<BYTE> tmp(total_len);
+		memcpy(&tmp[0], orgine_data.data(), data_len);
+
+
+
+		if (!CryptEncrypt(hKey, NULL, TRUE, 0, &tmp[0], &data_len, total_len)) {
+			printf("Error %x during CryptEncrypt!\n", GetLastError());
+			break;
+		}
+
+		printf("%d\n%s\n", total_len, &tmp[0]);
+
+		DWORD data_len2 = data_len;
+		std::vector<BYTE> tmp2(data_len2);
+		memcpy(&tmp2[0], tmp.data(), data_len2);
+
+
+		if (!CryptDecrypt(hKey, NULL, TRUE, 0, (BYTE *)&tmp2[0], &data_len2)) {
+			printf("CryptDecrypt failed.\n");
+			break;
+		}
+
+		std::string output;
+		output.assign(reinterpret_cast<char*>(&tmp2[0]), data_len2);
+
+		printf("%s\n", output.c_str());
+	} while (0);
+
+	if (hKey != NULL) {
+		CryptDestroyKey(hKey);		
+	}
+
+	if (hProv != NULL)	{
+		CryptReleaseContext(hProv, 0);		
+	}
+}
