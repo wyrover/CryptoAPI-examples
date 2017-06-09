@@ -64,6 +64,29 @@ CryptoAPI 为开发者提供在 Windows 下使用 PKI 的 API。CryptoAPI 包括
 - CryptAcquireContext 获得指定 CSP 的密钥容器的句柄
 - CryptReleaseContext 释放由 CryptAcquireContext 得到的句柄
 
+
+``` cpp
+BOOL OpenCryptContext(HCRYPTPROV* provider)
+{
+    DWORD dwVersion = GetVersion();
+    DWORD dwMajor = (DWORD)(LOBYTE(LOWORD(dwVersion)));
+    LPCTSTR pszProvider = MS_ENH_RSA_AES_PROV;
+
+    if (dwMajor <= 5)
+        pszProvider = MS_ENH_RSA_AES_PROV_XP;
+
+    if (!CryptAcquireContext(provider, 0, pszProvider, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
+        if (!CryptAcquireContext(provider, 0, pszProvider, PROV_RSA_AES, CRYPT_NEWKEYSET)) {
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+```
+
+
+
 ### 密钥相关
 
 用来创建和销毁密钥，也可以使用一个已有的密钥
