@@ -127,3 +127,10 @@ BOOL OpenCryptContext(HCRYPTPROV* provider)
 3. 生成 RSA 密钥对
 4. 使用 RSA 私钥对 A.dat 进行签名，将签名信息放在 A.dat 的末端（生成 A.enc.dat)
 5. 在客户端使用 RSA 公钥对 A.enc.dat 的前置数据（总大小-签名信息大小）进行 hash 签名验证
+
+
+
+## links
+
+- [循环读取文件块加解密](https://github.com/balalala/Courseware_Office/blob/71d60e0b2eb718c7bd4de87e387757c4ae04baeb/win2.4/PKI/V2.4-20121023/Samples/CryptoAPI/VC/EncryptDecryptFile/EncryptFile.cpp)
+- [读写证书](https://github.com/ermilindwalekar/Windows_Classic_Samples/blob/cded84bed49cb8ef2095e6470ac83ee3264c4113/Samples/Win7Samples/netds/peertopeer/DRT/CAPIWrappers.cpp)
