@@ -35,4 +35,25 @@ private:
     HCRYPTKEY  hKey;
 };
 
+
+// From:
+// http://msdn.microsoft.com/en-us/library/windows/desktop/aa379931(v=vs.85).aspx
+typedef struct _plaintext_blob_t {
+	BLOBHEADER hdr;
+	DWORD cbKeySize;
+	BYTE rgbKeyData[1];
+} plaintext_blob_t;
+
+void gen_aes256_key_iv();
+
+
+DWORD aes_Encrypt(LPBYTE key, DWORD SizeKey, LPBYTE iv, LPBYTE InData, DWORD SizeInData, LPBYTE *OutData);
+DWORD aes_Decrypt(LPBYTE key, DWORD SizeKey, LPBYTE iv, LPBYTE Data, LPDWORD SizeData);
+
+bool aes_encrypt_file(const char* base64_key, const char* base64_iv, const char* filename, const char* out_filename);
+bool aes_decrypt_file(const char* base64_key, const char* base64_iv, const char* filename, const char* out_filename);
+
+
+void aes_encrypt_test();
+
 #endif // __CACTUS_CRYPTO_API_AES_H__
