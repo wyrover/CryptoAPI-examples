@@ -1,21 +1,21 @@
 #include "common.h"
 #include <fstream>
+#include <algorithm>
+#include <sstream>
+#include <iomanip>
 
 // allocate memory
-void* xmalloc(SIZE_T dwSize)
-{
+void* xmalloc(SIZE_T dwSize) {
     return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dwSize);
 }
 
 // free memory
-void xfree(void* mem)
-{
+void xfree(void* mem) {
     HeapFree(GetProcessHeap(), 0, mem);
 }
 
 // print binary as c array
-void print_bin2c(BYTE* buffer, unsigned int buffer_len)
-{
+void print_bin2c(BYTE* buffer, unsigned int buffer_len) {
     int i;
 
     for (i = 0; i < buffer_len; i++) {
@@ -29,8 +29,7 @@ void print_bin2c(BYTE* buffer, unsigned int buffer_len)
     }
 }
 
-std::string HexEncode(const void* bytes, size_t size)
-{
+std::string HexEncode(const void* bytes, size_t size) {
     static const char kHexChars[] = "0123456789ABCDEF";
     // Each input byte creates two output hex characters.
     std::string ret(size * 2, '\0');
@@ -44,8 +43,7 @@ std::string HexEncode(const void* bytes, size_t size)
     return ret;
 }
 
-BOOL get_file_contents(const char* filename, std::vector<BYTE>& out_buffer)
-{
+BOOL get_file_contents(const char* filename, std::vector<BYTE>& out_buffer) {
     std::ifstream in(filename, std::ios::in | std::ios::binary);
 
     if (in) {
@@ -60,8 +58,7 @@ BOOL get_file_contents(const char* filename, std::vector<BYTE>& out_buffer)
     return FALSE;
 }
 
-void put_file_content(const char* filename, const BYTE* data, DWORD data_len)
-{
+void put_file_content(const char* filename, const BYTE* data, DWORD data_len) {
     FILE* f = fopen(filename, "wb+");
     fwrite(data, 1, data_len, f);
     fflush(f);
@@ -69,8 +66,7 @@ void put_file_content(const char* filename, const BYTE* data, DWORD data_len)
 }
 
 // display extended windows error
-void xstrerror(char* fmt, ...)
-{
+void xstrerror(char* fmt, ...) {
     char*    error = NULL;
     va_list arglist;
     char    buffer[2048];
@@ -80,9 +76,9 @@ void xstrerror(char* fmt, ...)
     va_end(arglist);
 
     if (FormatMessage(
-            FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-            NULL, dwError, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-            (LPSTR)&error, 0, NULL)) {
+                FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+                NULL, dwError, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                (LPSTR)&error, 0, NULL)) {
         printf("  [ %s : %s\n", buffer, error);
         LocalFree(error);
     } else {
@@ -91,8 +87,7 @@ void xstrerror(char* fmt, ...)
 }
 
 
-DWORD GetCipherBlockSize(HCRYPTKEY key)
-{
+DWORD GetCipherBlockSize(HCRYPTKEY key) {
     DWORD block_size_in_bits = 0;
     DWORD param_size = sizeof(block_size_in_bits);
     BOOL ok = CryptGetKeyParam(key, KP_BLOCKLEN,
@@ -106,8 +101,7 @@ DWORD GetCipherBlockSize(HCRYPTKEY key)
 }
 
 
-bool Base64EncodeA(char **dest, unsigned long *dlen, const unsigned char *src, unsigned long slen)
-{
+bool Base64EncodeA(char** dest, unsigned long* dlen, const unsigned char* src, unsigned long slen) {
     if (src == NULL)
         return false;
 
@@ -115,7 +109,7 @@ bool Base64EncodeA(char **dest, unsigned long *dlen, const unsigned char *src, u
         return false;
 
     //*dest = (char *)malloc(*dlen * sizeof(char));
-    *dest = (char *)xmalloc(*dlen * sizeof(char));
+    *dest = (char*)xmalloc(*dlen * sizeof(char));
 
     if (*dest == NULL) return false;
 
@@ -131,8 +125,7 @@ bool Base64EncodeA(char **dest, unsigned long *dlen, const unsigned char *src, u
 }
 
 
-bool Base64DecodeA(unsigned char **dest, unsigned long *dlen, const char *src, unsigned long slen)
-{
+bool Base64DecodeA(unsigned char** dest, unsigned long* dlen, const char* src, unsigned long slen) {
     if (src == NULL)
         return false;
 
@@ -140,7 +133,7 @@ bool Base64DecodeA(unsigned char **dest, unsigned long *dlen, const char *src, u
         return false;
 
     //*dest = (unsigned char *)malloc((*dlen + 1) * sizeof(unsigned char));
-    *dest = (unsigned char *)xmalloc((*dlen + 1) * sizeof(unsigned char));
+    *dest = (unsigned char*)xmalloc((*dlen + 1) * sizeof(unsigned char));
 
     if (*dest == NULL) return false;
 
@@ -156,15 +149,14 @@ bool Base64DecodeA(unsigned char **dest, unsigned long *dlen, const char *src, u
 }
 
 
-bool Bin2Hex(char **dest, unsigned long *dlen, const unsigned char *src, unsigned long slen)
-{
+bool Bin2Hex(char** dest, unsigned long* dlen, const unsigned char* src, unsigned long slen) {
     if (src == NULL)
         return false;
 
     if (!CryptBinaryToString(src, slen, CRYPT_STRING_HEXRAW | CRYPT_STRING_NOCRLF, NULL, dlen))
         return false;
 
-    *dest = (char *)xmalloc(*dlen * sizeof(char));
+    *dest = (char*)xmalloc(*dlen * sizeof(char));
 
     if (*dest == NULL) return false;
 
@@ -180,8 +172,7 @@ bool Bin2Hex(char **dest, unsigned long *dlen, const unsigned char *src, unsigne
 }
 
 
-bool Hex2Bin(unsigned char **dest, unsigned long *dlen, const char *src, unsigned long slen)
-{
+bool Hex2Bin(unsigned char** dest, unsigned long* dlen, const char* src, unsigned long slen) {
     if (src == NULL)
         return false;
 
@@ -189,7 +180,7 @@ bool Hex2Bin(unsigned char **dest, unsigned long *dlen, const char *src, unsigne
         return false;
 
     //*dest = (unsigned char *)malloc((*dlen + 1) * sizeof(unsigned char));
-    *dest = (unsigned char *)xmalloc((*dlen + 1) * sizeof(unsigned char));
+    *dest = (unsigned char*)xmalloc((*dlen + 1) * sizeof(unsigned char));
 
     if (*dest == NULL) return false;
 
@@ -206,8 +197,7 @@ bool Hex2Bin(unsigned char **dest, unsigned long *dlen, const char *src, unsigne
 
 
 
-bool get_key_iv_from_base64(const char* key_base64_str, const char* iv_base64_str, std::vector<BYTE>& key, std::vector<BYTE>& iv)
-{
+bool get_key_iv_from_base64(const char* key_base64_str, const char* iv_base64_str, std::vector<BYTE>& key, std::vector<BYTE>& iv) {
     bool ret = false;
     LPBYTE dest_key = NULL;
     unsigned long dest_key_len;
@@ -242,8 +232,7 @@ bool get_key_iv_from_base64(const char* key_base64_str, const char* iv_base64_st
     return ret;
 }
 
-bool get_key_iv_from_hex(const char* key_hex_str, const char* iv_hex_str, std::vector<BYTE>& key, std::vector<BYTE>& iv)
-{
+bool get_key_iv_from_hex(const char* key_hex_str, const char* iv_hex_str, std::vector<BYTE>& key, std::vector<BYTE>& iv) {
     bool ret = false;
     LPBYTE dest_key = NULL;
     unsigned long dest_key_len;
@@ -278,8 +267,7 @@ bool get_key_iv_from_hex(const char* key_hex_str, const char* iv_hex_str, std::v
     return ret;
 }
 
-char* Xor(char* szData, DWORD dwKey, int nLength)
-{
+char* Xor(char* szData, DWORD dwKey, int nLength) {
     if (szData == NULL)
         return NULL;
 
@@ -289,8 +277,7 @@ char* Xor(char* szData, DWORD dwKey, int nLength)
     return szData;
 }
 
-void reverse(BYTE* data, int nLen)
-{
+void reverse(BYTE* data, int nLen) {
     for (int ii = 0; ii < nLen / 2; ii++) {
         BYTE c = data[ii];
         data[ii] = data[nLen - ii - 1];
@@ -298,8 +285,7 @@ void reverse(BYTE* data, int nLen)
     }
 }
 
-PBYTE sig2hex(BYTE* pbSignature, DWORD dwSigLen)
-{
+PBYTE sig2hex(BYTE* pbSignature, DWORD dwSigLen) {
     DWORD len = 0;
     PBYTE hex;
     // determine how much space we need
@@ -314,16 +300,14 @@ PBYTE sig2hex(BYTE* pbSignature, DWORD dwSigLen)
     return hex;
 }
 
-void put_file_sign_content(const char* filename, const BYTE* data, DWORD data_len)
-{
+void put_file_sign_content(const char* filename, const BYTE* data, DWORD data_len) {
     FILE* f = fopen(filename, "ab+");
     fwrite(data, 1, data_len, f);
     fflush(f);
     fclose(f);
 }
 
-BOOL get_enc_file_data(const char* filename, std::vector<BYTE>& out_buffer)
-{
+BOOL get_enc_file_data(const char* filename, std::vector<BYTE>& out_buffer) {
     std::ifstream in(filename, std::ios::in | std::ios::binary);
 
     if (in) {
@@ -342,8 +326,7 @@ BOOL get_enc_file_data(const char* filename, std::vector<BYTE>& out_buffer)
     return FALSE;
 }
 
-BOOL get_enc_file_sign_message(const char* filename, std::vector<BYTE>& out_buffer)
-{
+BOOL get_enc_file_sign_message(const char* filename, std::vector<BYTE>& out_buffer) {
     std::ifstream in(filename, std::ios::in | std::ios::binary);
 
     if (in) {
@@ -363,8 +346,7 @@ BOOL get_enc_file_sign_message(const char* filename, std::vector<BYTE>& out_buff
     return FALSE;
 }
 
-BOOL OpenCryptContext(HCRYPTPROV* provider)
-{
+BOOL OpenCryptContext(HCRYPTPROV* provider) {
     DWORD dwVersion = GetVersion();
     DWORD dwMajor = (DWORD)(LOBYTE(LOWORD(dwVersion)));
     LPCTSTR pszProvider = MS_ENH_RSA_AES_PROV;
@@ -379,4 +361,129 @@ BOOL OpenCryptContext(HCRYPTPROV* provider)
     }
 
     return TRUE;
+}
+
+typedef	std::vector<unsigned char> ByteVec;
+
+std::string toHex(const std::vector<unsigned char>& byteVec) {
+    std::ostringstream buf;
+    for (ByteVec::const_iterator it = byteVec.begin(); it != byteVec.end(); it++)
+        buf << std::setfill('0') << std::setw(2) << std::hex <<
+            (short)*it;
+    return buf.str();
+}
+
+
+bool getOneChar(ByteVec& hexStr, int& c) {
+    if (hexStr.empty()) return false;
+    int ch = hexStr.back();
+    hexStr.pop_back();
+    while (ch == ' ' || ch == '\r' || ch == '\t' || ch == '\n') {
+        if (hexStr.empty()) return false;
+        ch = hexStr.back();
+        hexStr.pop_back();
+    }
+    if (ch >= '0' && ch <= '9')
+        c = ch - '0';
+    else if (ch >= 'A' && ch <= 'F')
+        c = ch - 'A' + 10;
+    else if (ch >= 'a' && ch <= 'f')
+        c = ch - 'a' + 10;
+    return true;
+}
+
+ByteVec fromHex(const std::string& hexStr) {
+    ByteVec retVal, inpVal(hexStr.length(), '\0');
+    copy(hexStr.begin(), hexStr.end(), inpVal.begin());
+    reverse(inpVal.begin(), inpVal.end());
+    int c1, c2;
+    while (getOneChar(inpVal, c1) && getOneChar(inpVal, c2)) {
+        retVal.push_back((c1 << 4) | c2);
+    }
+    return retVal;
+}
+
+
+int win32_get_random_bytes(unsigned char *buf, size_t size) {  /* {{{ */
+
+	unsigned int has_contextg = 0;
+
+	BOOL ret;
+	size_t i = 0;
+
+	HCRYPTPROV   hCryptProv;
+	unsigned int has_crypto_ctx = 0;
+
+	if (has_crypto_ctx == 0) {
+		/* CRYPT_VERIFYCONTEXT > only hashing&co-like use, no need to acces prv keys */
+		if (!CryptAcquireContext(&hCryptProv, NULL, NULL, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET | CRYPT_VERIFYCONTEXT)) {
+			/* Could mean that the key container does not exist, let try
+			again by asking for a new one. If it fails here, it surely means that the user running
+			this process does not have the permission(s) to use this container.
+			*/
+			if (GetLastError() == NTE_BAD_KEYSET) {
+				if (CryptAcquireContext(&hCryptProv, NULL, NULL, PROV_RSA_FULL, CRYPT_NEWKEYSET | CRYPT_MACHINE_KEYSET | CRYPT_VERIFYCONTEXT)) {
+					has_crypto_ctx = 1;
+				}
+				else {
+					has_crypto_ctx = 0;
+				}
+			}
+		}
+		else {
+			has_crypto_ctx = 1;
+		}
+	}
+
+
+	if (has_crypto_ctx == 0) {
+		return FAILURE;
+	}
+
+	ret = CryptGenRandom(hCryptProv, size, buf);
+
+	if (ret) {
+		return SUCCESS;
+	}
+	else {
+		return FAILURE;
+	}
+}
+
+int usleep(unsigned int useconds)
+{
+	HANDLE timer;
+	LARGE_INTEGER due;
+
+	due.QuadPart = -(10 * (__int64)useconds);
+
+	timer = CreateWaitableTimer(NULL, TRUE, NULL);
+	SetWaitableTimer(timer, &due, 0, NULL, NULL, 0);
+	WaitForSingleObject(timer, INFINITE);
+	CloseHandle(timer);
+	return 0;
+}
+
+
+int utf16string_length(LPWSTR s) {
+	int i = 0;
+
+	while (s[i]) {
+		i++;
+	}
+	return i;
+}
+
+LPSTR utf16string_convert(LPWSTR s) {
+	LPSTR r;
+	int i = 0;
+	r = (LPSTR)malloc((utf16string_length(s) + 1)*sizeof(CHAR));
+	if (r != NULL){
+		while (s[i]) {
+			r[i] = s[i];
+			i++;
+		}
+		r[i] = '\0';
+	}
+	return r;
 }

@@ -137,3 +137,9 @@ BOOL OpenCryptContext(HCRYPTPROV* provider)
 - [数字证书原理，公钥私钥加密 - 读过最浅显易懂的密钥 topic](http://www.jianshu.com/p/671ebeddcf60)
 - [使用 C++ 实现数字证书中心演示系统](http://www.jianshu.com/p/3661d70138da)
 - [Singler 的专栏 C/C++ 与数字安全](http://blog.csdn.net/yyfzy)
+- [Win7_SDK_Samples/security/cryptoapi](https://github.com/bugparty/Win7_SDK_Samples/tree/0a9b432d9a3842208dfb97812920e3bc8abec024/security/cryptoapi)
+- https://github.com/DigitalGlobe/tools
+- https://github.com/leeqwind/PESignAnalyzer
+- [证书转换](https://github.com/ASMlover/study/blob/28cac4c6c504303c08973255c58d10a8d369bd69/cplusplus/RCF/include/RCF/Certificate.hpp)
+- [EncryptingDecrypting Data through PFX certificate on Windows Mobile](https://blogs.msdn.microsoft.com/raffael/2008/04/01/encryptingdecrypting-data-through-pfx-certificate-on-windows-mobile/)
+- [How to use certificate from disk with Microsoft CryptoAPI](https://www.codeproject.com/Articles/125124/How-to-use-certificate-from-disk-with-Microsoft-Cr)

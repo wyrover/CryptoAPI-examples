@@ -9,6 +9,11 @@
 #include <vector>
 
 
+typedef enum {
+	SUCCESS = 0,
+	FAILURE = -1,		/* this MUST stay a negative number, or it may affect functions! */
+} ZEND_RESULT_CODE;
+
 
 // allocate memory
 void* xmalloc(SIZE_T dwSize);
@@ -44,6 +49,11 @@ bool Bin2Hex(char **dest, unsigned long *dlen, const unsigned char *src, unsigne
 
 bool Hex2Bin(unsigned char **dest, unsigned long *dlen, const char *src, unsigned long slen);
 
+
+std::string toHex(const std::vector<unsigned char> & byteVec);
+
+std::vector<unsigned char> fromHex(const std::string & hexStr);
+
 bool get_key_iv_from_base64(const char* key_base64_str, const char* iv_base64_str, std::vector<BYTE>& key, std::vector<BYTE>& iv);
 
 bool get_key_iv_from_hex(const char* key_base64_str, const char* iv_base64_str, std::vector<BYTE>& key, std::vector<BYTE>& iv);
@@ -60,6 +70,13 @@ void reverse(BYTE* data, int nLen);
 
 
 BOOL OpenCryptContext(HCRYPTPROV* provider);
+
+
+int usleep(unsigned int useconds);
+
+
+int utf16string_length(LPWSTR s);
+LPSTR utf16string_convert(LPWSTR s);
 
 
 #endif // __CACTUS_COMMON_H__
