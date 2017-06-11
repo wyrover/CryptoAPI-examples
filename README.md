@@ -120,6 +120,17 @@ BOOL OpenCryptContext(HCRYPTPROV* provider)
 - CryptVerifySignature 校验一个数字签名
 
 
+## 会话密钥(对称加密)的生成
+
+一般会话密钥可通过自己设置的(字符串密码+盐) HASH 后生成密钥, 或者通过随机数直接生成
+
+如果是 AES 可以生成 key 和 iv
+
+## 非对称加密的密钥生成
+
+随机生成，生成的密钥保存到证书文件里(.pem/.pfx)里，可通过 openssl 来生成
+
+
 ## 加密脚本文件的流程
 
 1. 生成一个固定 AES 密钥，用于加密脚本
@@ -143,3 +154,7 @@ BOOL OpenCryptContext(HCRYPTPROV* provider)
 - [证书转换](https://github.com/ASMlover/study/blob/28cac4c6c504303c08973255c58d10a8d369bd69/cplusplus/RCF/include/RCF/Certificate.hpp)
 - [EncryptingDecrypting Data through PFX certificate on Windows Mobile](https://blogs.msdn.microsoft.com/raffael/2008/04/01/encryptingdecrypting-data-through-pfx-certificate-on-windows-mobile/)
 - [How to use certificate from disk with Microsoft CryptoAPI](https://www.codeproject.com/Articles/125124/How-to-use-certificate-from-disk-with-Microsoft-Cr)
+- [Digital Certificate Creator Tool](https://www.codeproject.com/Articles/570333/DigitalplusCertificateplusCreatorplusTool)
+- [Creating Self-signed Certificates](https://www.codeproject.com/Articles/1163827/Creating-Self-signed-Certificates)
+- [Encrypt/Self Decrypt Files in Native C++ and .NET](https://www.codeproject.com/Articles/4645/Encrypt-Self-Decrypt-Files-in-Native-C-and-NET)
+- [How to Sign Device Drivers with WDK 7.1](https://www.codeproject.com/Tips/1003158/How-to-Sign-Device-Drivers-with-WDK)
