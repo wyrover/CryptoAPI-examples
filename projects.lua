@@ -412,4 +412,31 @@ workspace "CryptoAPI-examples"
                 "crypt32.lib",                
             }
 
+        create_console_project("rc4", "src")
+            links
+            {
+                
+                "crypt32.lib",                
+            }     
+
+        create_console_project("hash_sha512", "src")
+            links
+            {
+                
+                "crypt32.lib",                
+            }   
+            
+        create_console_project("rsa2048", "src")
+            links
+            {
+                
+                "crypt32.lib",                
+            }  
+            
+        create_console_project("aes256", "src")
+            links
+            {
+                
+                "crypt32.lib",                
+            }  
             

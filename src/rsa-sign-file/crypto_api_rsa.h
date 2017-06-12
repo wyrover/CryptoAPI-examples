@@ -25,6 +25,24 @@ DWORD rsa_Decrypt(LPBYTE PrivateKey, DWORD SizeKey, LPBYTE Data, LPDWORD SizeDat
 void rsa_encrypt_test();
 void rsa_encrypt_test2();
 
+class CryptoRSA
+{
+public:
+    CryptoRSA();
+    ~CryptoRSA();
+public:
+    bool Init();
+    bool ImportPrivateKey(const char* pem_private_key);
+    bool ImportPublicKey(const char* pem_public_key);
+
+    DWORD Encrypt(LPBYTE InData, DWORD SizeInData, LPBYTE *OutData);
+    DWORD Decrypt(LPBYTE Data, LPDWORD SizeData);
+protected:
+    HCRYPTPROV provider_;
+    HCRYPTKEY  key_;
+
+};
+
 
 
 #endif // __CACTUS_CRYPTO_API_RSA_H__

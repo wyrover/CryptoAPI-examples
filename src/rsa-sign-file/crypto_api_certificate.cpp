@@ -604,6 +604,58 @@ int getCertificateKeyUsage(BYTE* certificate,
 }
 
 
+// Read a single cert from a file
+HRESULT ReadCertFromFile(LPCWSTR pwzFileName, CERT_CONTEXT** ppCert, HCRYPTPROV* phCryptProv)
+{
+    BOOL bRet = FALSE;
+    FILE* pFile = NULL;
+    errno_t err;
 
+    // open cert file for local cert
+    err = _wfopen_s(&pFile, pwzFileName, L"rb");
+    if (err)
+    {
+        return CRYPT_E_FILE_ERROR;
+    }
+
+    const DWORD SIXTYFOUR_K = 64 * 1024;
+    BYTE s_fileBuf[SIXTYFOUR_K] = { 0 };
+    
+    // read local cert into *ppLocalCert, allocating memory
+    fread(s_fileBuf, sizeof(s_fileBuf), 1, pFile);
+    fclose(pFile);
+
+    CRYPT_DATA_BLOB blob;
+    blob.cbData = sizeof(s_fileBuf);
+    blob.pbData = s_fileBuf;
+    HCERTSTORE hCertStore = PFXImportCertStore(&blob, L"DRT Rocks!", CRYPT_EXPORTABLE);
+    if (NULL == hCertStore)
+        return HRESULT_FROM_WIN32(GetLastError());
+
+    // TODO: does this have to be a c style cast? I get compile errors if I try reinterpret or static cast
+    // the first cert is always the leaf cert (since we encoded it that way)
+    CERT_CONTEXT* pCertContext = (CERT_CONTEXT*)CertEnumCertificatesInStore(hCertStore, NULL);
+    if (NULL == pCertContext)
+        return HRESULT_FROM_WIN32(GetLastError());
+
+    // retreive the crypt provider which has the private key for this certificate
+    DWORD dwKeySpec = 0;
+    HCRYPTPROV hCryptProv = NULL;
+    bRet = CryptAcquireCertificatePrivateKey(pCertContext,
+        CRYPT_ACQUIRE_SILENT_FLAG | CRYPT_ACQUIRE_COMPARE_KEY_FLAG,
+        NULL, &hCryptProv, &dwKeySpec, NULL);
+    if (!bRet)
+        return HRESULT_FROM_WIN32(GetLastError());
+
+    // make sure provider stays around for duration of the test run. We need hCryptProv of root cert to sign local certs
+    CryptContextAddRef(hCryptProv, NULL, 0);
+
+    // everything succeeded, safe to set outparam
+    *ppCert = pCertContext;
+    if (NULL != phCryptProv)
+        *phCryptProv = hCryptProv;
+
+    return S_OK;
+}
 
 

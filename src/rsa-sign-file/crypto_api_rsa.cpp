@@ -1007,6 +1007,18 @@ BOOL verify_file2(std::string filename)
 //  return true;
 //}
 
+CryptoRSA::~CryptoRSA()
+{
+
+    if (key_) {
+        CryptDestroyKey(key_);
+    }
+
+    if (provider_) {
+        CryptReleaseContext(provider_, 0);
+    }        
+}
+
 //void CryptoUninit(HCRYPTKEY key, HCRYPTPROV provider)
 //{
 //  if (key)
@@ -1020,3 +1032,193 @@ BOOL verify_file2(std::string filename)
 //  if (!CryptAcquireContextW(&provider, NULL, NULL, PROV_RSA_FULL, CRYPT_DELETEKEYSET))
 //      printf("Error: %d\n", GetLastError());
 //}
+
+bool CryptoRSA::Init()
+{
+    return OpenCryptContext(&provider_) == TRUE;        
+}
+
+bool CryptoRSA::ImportPrivateKey(const char* pem_private_key)
+{
+    bool ret = false;
+
+    DWORD dwBufferLen = 0, cbKeyBlob = 0;
+    LPBYTE pbBuffer = NULL, pbKeyBlob = NULL;
+
+    do 
+    {
+        if (provider_ == NULL)
+            break;
+
+        if (key_ != NULL) {
+            CryptDestroyKey(key_);
+        }        
+
+        if (!CryptStringToBinaryA(pem_private_key, 0, CRYPT_STRING_BASE64HEADER, NULL, &dwBufferLen, NULL, NULL)) {
+            break;
+        }       
+
+        pbBuffer = (LPBYTE)xmalloc(dwBufferLen);
+        if (!CryptStringToBinaryA(pem_private_key, 0, CRYPT_STRING_BASE64HEADER, pbBuffer, &dwBufferLen, NULL, NULL)) {
+            break;
+        }
+            
+
+        if (!CryptDecodeObjectEx(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, PKCS_RSA_PRIVATE_KEY, pbBuffer, dwBufferLen, 0, NULL, NULL, &cbKeyBlob)) {
+            break;
+        }
+
+        pbKeyBlob = (LPBYTE)xmalloc(cbKeyBlob);
+        if (!CryptDecodeObjectEx(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, PKCS_RSA_PRIVATE_KEY, pbBuffer, dwBufferLen, 0, NULL, pbKeyBlob, &cbKeyBlob)) {
+            break;
+        }
+
+        /*if (!CryptAcquireContext(&provider_, NULL, MS_ENHANCED_PROV, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
+            break;
+            }*/
+
+        if (!CryptImportKey(provider_, pbKeyBlob, cbKeyBlob, NULL, 0, &key_)) {
+            break;
+        }
+
+        ret = true;
+            
+
+    } while (0);
+
+    if (pbBuffer) {
+        xfree(pbBuffer);
+        pbBuffer = NULL;
+    }
+
+    if (pbKeyBlob) {
+        xfree(pbKeyBlob);
+        pbKeyBlob = NULL;
+    }
+
+
+    return ret;
+    
+
+    
+}
+
+bool CryptoRSA::ImportPublicKey(const char* pem_public_key)
+{
+    bool ret = false;    
+
+
+    DWORD derPubKeyLen = 0;
+    LPBYTE derPubKey = NULL;
+
+    DWORD publicKeyInfoLen;
+    LPBYTE publicKeyInfo = NULL;
+
+    do 
+    {
+        if (provider_ == NULL)
+            break;
+
+        if (key_ != NULL) {
+            CryptDestroyKey(key_);
+        }
+
+        if (!CryptStringToBinaryA(pem_public_key, 0, CRYPT_STRING_BASE64HEADER, derPubKey, &derPubKeyLen, NULL, NULL)) {
+            break;
+        }
+
+        derPubKey = (LPBYTE)xmalloc(derPubKeyLen);
+
+        if (!CryptStringToBinaryA(pem_public_key, 0, CRYPT_STRING_BASE64HEADER, derPubKey, &derPubKeyLen, NULL, NULL)) {
+            break;
+        }
+
+        if (!CryptDecodeObjectEx(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, X509_PUBLIC_KEY_INFO, derPubKey, derPubKeyLen, 0, NULL, NULL, &publicKeyInfoLen)) {
+            break;
+        }
+
+        publicKeyInfo = (PBYTE)xmalloc(publicKeyInfoLen);
+
+        if (!CryptDecodeObjectEx(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, X509_PUBLIC_KEY_INFO, derPubKey, derPubKeyLen, 0, NULL, &publicKeyInfo, &publicKeyInfoLen))
+            break;
+
+        if (!CryptImportPublicKeyInfo(provider_, X509_ASN_ENCODING, (CERT_PUBLIC_KEY_INFO*)publicKeyInfo, &key_))
+            break;
+
+        ret = true;
+    } while (0);
+
+    if (derPubKey) {
+        xfree(derPubKey);
+        derPubKey = NULL;      
+    }
+
+    if (publicKeyInfo) {
+        xfree(publicKeyInfo);
+        publicKeyInfo = NULL;
+    }
+
+    return ret;
+}
+
+DWORD CryptoRSA::Encrypt(LPBYTE InData, DWORD SizeInData, LPBYTE *OutData)
+{
+   
+    DWORD SizeData = SizeInData;
+    DWORD SizeBuffer = 0;
+    DWORD Result = -1;
+
+    do {
+        if (provider_ == NULL) {            
+            break;
+        }
+
+        if (key_ == NULL) {
+            break;
+        }      
+
+        if (!CryptEncrypt(key_, NULL, TRUE, 0, NULL, &SizeData, 0)) // Retrieve length of encrypted data
+            break;
+
+        SizeBuffer = SizeData;
+        SizeData = SizeInData;
+
+        if (SizeBuffer < SizeInData) // if SizeEncryptedData is smaller than SizeInData and encryption is happening, an error has occured.
+            break;
+
+        *OutData = (LPBYTE)xmalloc(SizeBuffer);
+
+        if (*OutData == NULL)
+            break;
+
+        //RtlSecureZeroMemory(OutData, SizeData); // Clear memory
+        memcpy(*OutData, InData, SizeInData); // Put InData temporarily into OutData for encryption
+
+        if (CryptEncrypt(key_, NULL, TRUE, 0, *OutData, &SizeData, SizeBuffer)) // Encrypt
+            Result = SizeData; // Set return value to the encrypted data size
+    } while (false);   
+
+    if (OutData != NULL && !Result)
+        xfree(*OutData);
+
+    return Result;
+}
+
+DWORD CryptoRSA::Decrypt(LPBYTE Data, LPDWORD SizeData)
+{
+   
+    DWORD Result = -1;
+
+    do {
+        if (provider_ == NULL || key_ == NULL) {            
+            break;
+        }        
+
+        if (!CryptDecrypt(key_, NULL, TRUE, 0, Data, SizeData)) // Decrypt data and retrieve decrypted size
+            break;
+
+        Result = *SizeData; // Set return value to the decrypted data size
+    } while (false);   
+
+    return Result;
+}
